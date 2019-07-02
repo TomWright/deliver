@@ -3,7 +3,7 @@ language: go
 go:
   - "1.12.x"
 
-go_import_path: github.com/tomwright/go-deliver
+go_import_path: github.com/tomwright/deliver
 
 script: go test -race ./ -coverprofile=coverage.txt -covermode=atomic
 
