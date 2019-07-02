@@ -23,3 +23,15 @@ brokers := []string{"cmg-local-kafka:9092"}
 publisher, err := deliver.NewKafkaPublisher(brokers)
 subscriber := deliver.NewKafkaSubscriber(brokers)
 ```
+
+## In Memory
+
+- Messages are served via a channel created in a Publisher.
+- Subscribers are created against a single Publisher.
+- Once a Publisher is closed and all messages are read, all Subscribers created from it will be stopped.
+
+Setup non-blocking without a buffer:
+```
+publisher := deliver.NewInMemoryPublisher(0, false)
+subscriber := deliver.NewInMemorySubscriber(publisher)
+```
