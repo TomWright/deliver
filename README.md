@@ -9,3 +9,17 @@ go get -u github.com/tomwright/deliver
 ```
 
 Publish + consume messages with standard interfaces.
+
+# Implementations
+
+## Kafka
+
+- `Message.Type()` response is used as the topic.
+- Messages are marked before the given `ConsumerFn` is executed. 
+
+Setup:
+```
+brokers := []string{"cmg-local-kafka:9092"}
+publisher, err := deliver.NewKafkaPublisher(brokers)
+subscriber := deliver.NewKafkaSubscriber(brokers)
+```
