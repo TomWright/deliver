@@ -5,7 +5,7 @@
 # deliver
 
 ```
-go get -u github.com/tomwright/null
+go get -u github.com/tomwright/deliver
 ```
 
 Publish + consume messages with standard interfaces.
