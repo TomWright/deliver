@@ -34,18 +34,18 @@ type kafkaSubscriber struct {
 //
 // If an error is returned then the consumer has not been started, otherwise you should listen
 // on the errChan and handle any consumer errors.
-func (x *kafkaSubscriber) Subscribe(ctx context.Context, fn ConsumeFn, consumerGroup string, errChan chan error, messageTypes ...string) error {
-	if consumerGroup == "" {
-		consumerGroup = "default"
+func (x *kafkaSubscriber) Subscribe(ctx context.Context, options SubscribeOptions) error {
+	if err := options.Validate(); err != nil {
+		return err
 	}
 
 	// Create the in-memory consumer group if it doesn't exists
-	if _, exists := x.consumerGroups[consumerGroup]; !exists {
-		cg, err := sarama.NewConsumerGroup(x.brokers, consumerGroup, x.config)
+	if _, exists := x.consumerGroups[options.Group]; !exists {
+		cg, err := sarama.NewConsumerGroup(x.brokers, options.Group, x.config)
 		if err != nil {
 			return err
 		}
-		x.consumerGroups[consumerGroup] = cg
+		x.consumerGroups[options.Group] = cg
 	}
 
 	stopConsumingMu := &sync.Mutex{}
@@ -66,12 +66,14 @@ func (x *kafkaSubscriber) Subscribe(ctx context.Context, fn ConsumeFn, consumerG
 			// if context is done, stop the routine
 			return
 
-		case err, ok := <-x.consumerGroups[consumerGroup].Errors():
+		case err, ok := <-x.consumerGroups[options.Group].Errors():
 			if !ok {
 				// if error chan is closed, stop the routine
 				return
 			}
-			errChan <- err
+			if options.Errors != nil {
+				options.Errors <- err
+			}
 		}
 	}()
 
@@ -85,22 +87,22 @@ consumeLoop:
 		}
 
 		h := &kafkaConsumerGroupHandler{
-			consumeFn: fn,
-			errChan:   errChan,
+			consumeFn: options.ConsumeFn,
+			errChan:   options.Errors,
 		}
 
-		if err := x.consumerGroups[consumerGroup].Consume(ctx, messageTypes, h); err != nil {
+		if err := x.consumerGroups[options.Group].Consume(ctx, options.Types, h); err != nil {
 			return fmt.Errorf("could not start consuming: %s", err)
 		}
 	}
 
 	// Make sure the consumer group is closed
-	if consumer, ok := x.consumerGroups[consumerGroup]; ok {
+	if consumer, ok := x.consumerGroups[options.Group]; ok {
 		if err := consumer.Close(); err != nil {
-			return fmt.Errorf("could not close consumer group: %s: %s", consumerGroup, err.Error())
+			return fmt.Errorf("could not close consumer group: %s: %s", options.Group, err.Error())
 		}
 	} else {
-		return fmt.Errorf("consumer group did not exist when attempting to close: %s", consumerGroup)
+		return fmt.Errorf("consumer group did not exist when attempting to close: %s", options.Group)
 	}
 
 	return nil

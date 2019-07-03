@@ -32,11 +32,13 @@ func main() {
 
 	// start 2 consumers that will stop after 10 seconds
 	consumerCtx, _ := context.WithTimeout(ctx, time.Second*10)
-	wg.Add(2) // add to the WaitGroup for the consumers
+	wg.Add(4) // add to the WaitGroup for the consumers
+	go startConsumer(consumerCtx, wg, subscriber, consumerErrors)
+	go startConsumer(consumerCtx, wg, subscriber, consumerErrors)
 	go startConsumer(consumerCtx, wg, subscriber, consumerErrors)
 	go startConsumer(consumerCtx, wg, subscriber, consumerErrors)
 
-	// publish some messages
+	// publish some messagesw
 	go publishMessages(publisher)
 
 	log.Println("waiting for consumers to stop")
@@ -106,7 +108,12 @@ func startConsumer(ctx context.Context, wg *sync.WaitGroup, subscriber deliver.S
 	defer wg.Done()
 
 	// block here until the consumer stops running
-	err := subscriber.Subscribe(ctx, userCreatedHandler, "message-logger", consumerErrors, messages.TypeUserCreated)
+	err := subscriber.Subscribe(ctx, deliver.SubscribeOptions{
+		ConsumeFn: userCreatedHandler,
+		Group:     "message-logger",
+		Types:     []string{messages.TypeUserCreated},
+		Errors:    consumerErrors,
+	})
 	if err != nil {
 		log.Printf("could not start consumer: %s\n", err.Error())
 		return

@@ -3,6 +3,7 @@ package deliver
 import (
 	"context"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"sync"
 )
@@ -72,16 +73,17 @@ func (x *inMemoryPublisher) Close() error {
 func NewInMemorySubscriber(publisher *inMemoryPublisher) Subscriber {
 	p := &inMemorySubscriber{
 		messageChan: publisher.messageChan,
-		consumers:   make(map[string]*consumerConfig),
+		consumers:   make(map[string]map[string]*consumerConfig),
 	}
 	return p
 }
 
 type consumerConfig struct {
 	ctx          context.Context
+	id           string
 	messageTypes []string
 	consumeFn    ConsumeFn
-	errChan      chan error
+	errChan      chan<- error
 }
 
 // handleMessageType returns true if this consumer config has subscribed to the given message type.
@@ -98,7 +100,7 @@ type inMemorySubscriber struct {
 	// messageChan is used to receive messages.
 	messageChan               <-chan *inMemoryMessage
 	consumersMu               sync.Mutex
-	consumers                 map[string]*consumerConfig
+	consumers                 map[string]map[string]*consumerConfig
 	distributeEventsRunningMu sync.Mutex
 	distributeEventsRunning   bool
 }
@@ -128,12 +130,19 @@ func (x *inMemorySubscriber) distributeEvents() {
 			}
 
 			x.consumersMu.Lock()
-			for _, c := range x.consumers {
-				if !c.handleMessageType(consumerMessage.Type) {
-					continue
-				}
-				if err := c.consumeFn(consumerMessage.Type, consumerMessage.Payload); err != nil {
-					c.errChan <- err
+		consumerGroupLoop:
+			for _, consumerGroup := range x.consumers {
+			consumerLoop:
+				for _, c := range consumerGroup {
+					if !c.handleMessageType(consumerMessage.Type) {
+						continue consumerLoop
+					}
+					if err := c.consumeFn(consumerMessage.Type, consumerMessage.Payload); err != nil {
+						if c.errChan != nil {
+							c.errChan <- err
+						}
+					}
+					continue consumerGroupLoop
 				}
 			}
 			x.consumersMu.Unlock()
@@ -141,26 +150,35 @@ func (x *inMemorySubscriber) distributeEvents() {
 	}
 }
 
-func (x *inMemorySubscriber) Subscribe(ctx context.Context, fn ConsumeFn, consumerGroup string, errChan chan error, messageTypes ...string) error {
+func (x *inMemorySubscriber) Subscribe(ctx context.Context, options SubscribeOptions) error {
 	if x.messageChan == nil {
 		return errors.New("missing message chan, was the publisher closed?")
+	}
+	if err := options.Validate(); err != nil {
+		return err
 	}
 
 	go x.distributeEvents()
 
-	x.consumersMu.Lock()
-	x.consumers[consumerGroup] = &consumerConfig{
+	consumer := &consumerConfig{
 		ctx:          ctx,
-		messageTypes: messageTypes,
-		consumeFn:    fn,
-		errChan:      errChan,
+		id:           uuid.New().String(),
+		messageTypes: options.Types,
+		consumeFn:    options.ConsumeFn,
+		errChan:      options.Errors,
 	}
+
+	x.consumersMu.Lock()
+	if _, ok := x.consumers[options.Group]; !ok {
+		x.consumers[options.Group] = make(map[string]*consumerConfig, 0)
+	}
+	x.consumers[options.Group][consumer.id] = consumer
 	x.consumersMu.Unlock()
 
 	// stop the consumer (delete the config) when the context is done
 	<-ctx.Done()
 	x.consumersMu.Lock()
-	delete(x.consumers, consumerGroup)
+	delete(x.consumers[options.Group], consumer.id)
 	x.consumersMu.Unlock()
 
 	return nil

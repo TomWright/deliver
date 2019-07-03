@@ -34,7 +34,12 @@ func main() {
 		ctx, _ = context.WithTimeout(ctx, time.Second*10)
 
 		// block here until the consumer stops running
-		err := subscriber.Subscribe(ctx, userCreatedHandler, "message-logger", consumerErrors, messages.TypeUserCreated)
+		err := subscriber.Subscribe(ctx, deliver.SubscribeOptions{
+			ConsumeFn: userCreatedHandler,
+			Group:     "message-logger",
+			Types:     []string{messages.TypeUserCreated},
+			Errors:    consumerErrors,
+		})
 		if err != nil {
 			log.Printf("could not start consumers: %s\n", err.Error())
 		}
