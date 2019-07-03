@@ -23,87 +23,92 @@ func main() {
 		}
 	}()
 
-	// define a handler function to log user created messages
-	userCreatedHandler := func(messageType string, messageBytes []byte) error {
-		switch messageType {
-		case messages.TypeUserCreated:
-			message := &messages.UserCreated{}
-			if err := message.WithPayload(messageBytes); err != nil {
-				return err
-			}
-
-			// check for a blank username
-			if message.Username == "" {
-				return fmt.Errorf("missing username in message: %s", message.Type())
-			}
-
-			log.Printf("user created: %s\n", message.Username)
-		default:
-			return fmt.Errorf("unexpected message type %s", messageType)
-		}
-
-		return nil
-	}
-
 	// start up a go routine to listen for and log errors returned from the consumer
 	consumerErrors := make(chan error)
-	go func() {
-		for {
-			err, ok := <-consumerErrors
-			if !ok {
-				return
-			}
-			log.Printf("error received from consumer: %s\n", err.Error())
-		}
-	}()
+	go logConsumerErrors(consumerErrors)
 
 	// create a WaitGroup so we know when all consumers have stopped
 	wg := &sync.WaitGroup{}
 
-	// subscribe the handler function to receive user created messages.
-	// do this in a go routine so as we don't block the main routine
-	startConsumer := func() {
-		// when this function returns, the consumer has stopped running
-		defer wg.Done()
-
-		// only run the consumer for 10 seconds
-		ctx, _ = context.WithTimeout(ctx, time.Second*10)
-
-		// block here until the consumer stops running
-		err := subscriber.Subscribe(ctx, userCreatedHandler, "message-logger", consumerErrors, messages.TypeUserCreated)
-		if err != nil {
-			log.Printf("could not start consumer: %s\n", err.Error())
-			return
-		}
-	}
-	wg.Add(1) // add to the WaitGroup for the consumer
-	go startConsumer()
-	wg.Add(1) // add to the WaitGroup for the consumer
-	go startConsumer()
+	// start 2 consumers that will stop after 10 seconds
+	consumerCtx, _ := context.WithTimeout(ctx, time.Second*10)
+	wg.Add(2) // add to the WaitGroup for the consumers
+	go startConsumer(consumerCtx, wg, subscriber, consumerErrors)
+	go startConsumer(consumerCtx, wg, subscriber, consumerErrors)
 
 	// publish some messages
-	go func() {
-		for i := 0; i < 20; i++ {
-			m := &messages.UserCreated{
-				Username: fmt.Sprintf("Tom%d", i),
-			}
-			if i%5 == 0 {
-				m.Username = ""
-			}
-			if err := publisher.Publish(m); err != nil {
-				log.Printf("publish message failed: %s\n", err.Error())
-			}
-			time.Sleep(time.Millisecond * 500)
-		}
-		// close the publisher when our work is done
-		if err := publisher.Close(); err != nil {
-			log.Printf("could not close publisher: %s\n", err)
-		}
-		log.Println("publisher stopped")
-	}()
+	go publishMessages(publisher)
 
 	log.Println("waiting for consumers to stop")
 	wg.Wait()
 
+	// close consumerErrors channel now all consumers using it have stopped
+	close(consumerErrors)
+
 	log.Println("all consumers have stopped")
+}
+
+// userCreatedHandler accepts user.created messages and logs them.
+func userCreatedHandler(messageType string, messageBytes []byte) error {
+	switch messageType {
+	case messages.TypeUserCreated:
+		message := &messages.UserCreated{}
+		if err := message.WithPayload(messageBytes); err != nil {
+			return err
+		}
+
+		// check for a blank username
+		if message.Username == "" {
+			return fmt.Errorf("missing username in message: %s", message.Type())
+		}
+
+		log.Printf("user created: %s\n", message.Username)
+	default:
+		return fmt.Errorf("unexpected message type %s", messageType)
+	}
+
+	return nil
+}
+
+func publishMessages(publisher deliver.Publisher) {
+	// publish messages with different Username's
+	for i := 1; i < 100; i++ {
+		message := &messages.UserCreated{
+			Username: fmt.Sprintf("Tom%d", i),
+		}
+		if i%5 == 0 {
+			message.Username = ""
+		}
+
+		// publish the message
+		if err := publisher.Publish(message); err != nil {
+			log.Printf("could not publish message: %s\n", err.Error())
+		}
+		// message published successfully
+
+		time.Sleep(time.Millisecond * 5)
+	}
+}
+
+func logConsumerErrors(consumerErrors chan error) {
+	for {
+		err, ok := <-consumerErrors
+		if !ok {
+			return
+		}
+		log.Printf("error received from consumer: %s\n", err.Error())
+	}
+}
+
+// subscribe the handler function to receive user created messages.
+func startConsumer(ctx context.Context, wg *sync.WaitGroup, subscriber deliver.Subscriber, consumerErrors chan error) {
+	// when this function returns, the consumer has stopped running
+	defer wg.Done()
+
+	// block here until the consumer stops running
+	err := subscriber.Subscribe(ctx, userCreatedHandler, "message-logger", consumerErrors, messages.TypeUserCreated)
+	if err != nil {
+		log.Printf("could not start consumer: %s\n", err.Error())
+		return
+	}
 }

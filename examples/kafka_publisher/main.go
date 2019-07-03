@@ -18,43 +18,31 @@ func main() {
 	// make sure we close the publisher when we're finished
 	defer func() {
 		if err := publisher.Close(); err != nil {
-			panic("could not close publisher: " + err.Error())
+			log.Printf("could not close publisher: %s\n", err.Error())
 		}
 	}()
 
-	// publish messages with a blank Username
-	go func() {
-		for {
-			var message deliver.Message = &messages.UserCreated{
-				Username: "",
-			}
+	publishMessages(publisher)
 
-			// publish the message
-			if err := publisher.Publish(message); err != nil {
-				// handle error
-				panic("could not publish message: " + err.Error())
-			}
-			// message published successfully
+	log.Println("finished publishing")
+}
 
-			time.Sleep(time.Millisecond * 3500)
-		}
-	}()
-
+func publishMessages(publisher deliver.Publisher) {
 	// publish messages with different Username's
 	for i := 1; i < 100; i++ {
-		var message deliver.Message = &messages.UserCreated{
+		message := &messages.UserCreated{
 			Username: fmt.Sprintf("Tom%d", i),
+		}
+		if i%5 == 0 {
+			message.Username = ""
 		}
 
 		// publish the message
 		if err := publisher.Publish(message); err != nil {
-			// handle error
-			panic("could not publish message: " + err.Error())
+			log.Printf("could not publish message: %s\n", err.Error())
 		}
 		// message published successfully
 
 		time.Sleep(time.Second)
 	}
-
-	log.Println("finished publishing")
 }
