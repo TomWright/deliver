@@ -17,7 +17,10 @@ type inMemoryMessage struct {
 }
 
 // NewInMemoryPublisher returns a new in-memory message publisher and a channel that the messages will be sent to.
-func NewInMemoryPublisher(bufferSize int, blockWrites bool) (Publisher, <-chan *inMemoryMessage) {
+//
+// bufferSize defines how many messages can be published without publishers being blocked, when blockWrites is false
+// and all consumers are busy.
+func NewInMemoryPublisher(blockWrites bool, bufferSize int) (Publisher, <-chan *inMemoryMessage) {
 	p := &inMemoryPublisher{
 		messageChan: make(chan *inMemoryMessage, bufferSize),
 		blockWrites: blockWrites,
@@ -26,9 +29,11 @@ func NewInMemoryPublisher(bufferSize int, blockWrites bool) (Publisher, <-chan *
 }
 
 type inMemoryPublisher struct {
-	// messageChan is used to sent messages.
+	// messageChan is used to send messages.
 	messageChan chan *inMemoryMessage
-	// if blockWrites is true writes will be blocked if there are no consumers running.
+	// blockWrites defines whether or not published messaged will be written to the messageChan
+	// in a separate go routine.
+	// If true and all consumers are busy, the publisher will be blocked.
 	blockWrites bool
 }
 

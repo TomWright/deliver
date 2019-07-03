@@ -13,7 +13,7 @@ import (
 func main() {
 	ctx := context.Background()
 
-	publisher, messageChan := deliver.NewInMemoryPublisher(0, false)
+	publisher, messageChan := deliver.NewInMemoryPublisher(false, 0)
 	subscriber := deliver.NewInMemorySubscriber(messageChan)
 
 	// make sure we close the publisher when we're finished
