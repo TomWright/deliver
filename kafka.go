@@ -22,9 +22,10 @@ func NewKafkaSubscriber(brokers []string) Subscriber {
 }
 
 type kafkaSubscriber struct {
-	consumerGroups map[string]sarama.ConsumerGroup
-	config         *sarama.Config
-	brokers        []string
+	consumerGroupsMu sync.Mutex
+	consumerGroups   map[string]sarama.ConsumerGroup
+	config           *sarama.Config
+	brokers          []string
 }
 
 // Subscribe starts a consumer to handle the given message types, under the given
@@ -40,13 +41,16 @@ func (x *kafkaSubscriber) Subscribe(ctx context.Context, options SubscribeOption
 	}
 
 	// Create the in-memory consumer group if it doesn't exists
+	x.consumerGroupsMu.Lock()
 	if _, exists := x.consumerGroups[options.Group]; !exists {
 		cg, err := sarama.NewConsumerGroup(x.brokers, options.Group, x.config)
 		if err != nil {
+			x.consumerGroupsMu.Unlock()
 			return err
 		}
 		x.consumerGroups[options.Group] = cg
 	}
+	x.consumerGroupsMu.Unlock()
 
 	stopConsumingMu := &sync.Mutex{}
 	stopConsuming := false
@@ -91,18 +95,21 @@ consumeLoop:
 			errChan:   options.Errors,
 		}
 
+		// if you are trying to consume multiple times this will hang here until some partitions
+		// are available.
 		if err := x.consumerGroups[options.Group].Consume(ctx, options.Types, h); err != nil {
-			return fmt.Errorf("could not start consuming: %s", err)
+			return fmt.Errorf("could not consume: %s", err)
 		}
 	}
 
 	// Make sure the consumer group is closed
+	x.consumerGroupsMu.Lock()
+	defer x.consumerGroupsMu.Unlock()
 	if consumer, ok := x.consumerGroups[options.Group]; ok {
 		if err := consumer.Close(); err != nil {
 			return fmt.Errorf("could not close consumer group: %s: %s", options.Group, err.Error())
 		}
-	} else {
-		return fmt.Errorf("consumer group did not exist when attempting to close: %s", options.Group)
+		delete(x.consumerGroups, options.Group)
 	}
 
 	return nil

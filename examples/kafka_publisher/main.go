@@ -5,7 +5,6 @@ import (
 	"github.com/tomwright/deliver"
 	"github.com/tomwright/deliver/examples/messages"
 	"log"
-	"time"
 )
 
 func main() {
@@ -42,7 +41,5 @@ func publishMessages(publisher deliver.Publisher) {
 			log.Printf("could not publish message: %s\n", err.Error())
 		}
 		// message published successfully
-
-		time.Sleep(time.Second)
 	}
 }

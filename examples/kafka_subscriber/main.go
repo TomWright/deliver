@@ -23,33 +23,30 @@ func main() {
 	// create a WaitGroup so we know when all consumers have stopped
 	wg := &sync.WaitGroup{}
 
-	// subscribe the handler function to receive user created messages.
-	// do this in a go routine so as we don't block the main routine
-	wg.Add(1) // add to the WaitGroup for the consumer
+	// define consumer options
+	opts := deliver.SubscribeOptions{
+		ConsumeFn: userCreatedHandler,
+		Group:     "message-logger",
+		Types:     []string{messages.TypeUserCreated},
+		Errors:    consumerErrors,
+	}
+	// start x instances of the consumer, that will timeout and stop after 60 seconds.
+	// the timeout probably wouldn't be applicable in a real-world application.
+	consumerCtx, _ := context.WithTimeout(ctx, time.Second*60)
+	consumerStartupErrors := deliver.SubscribeNonBlocking(consumerCtx, opts, subscriber, wg, 1)
+	// receive and log consumer start-up errors
 	go func() {
-		// when this function returns, the consumer has stopped running
-		defer wg.Done()
-
-		// only run the consumer for 10 seconds
-		ctx, _ = context.WithTimeout(ctx, time.Second*10)
-
-		// block here until the consumer stops running
-		err := subscriber.Subscribe(ctx, deliver.SubscribeOptions{
-			ConsumeFn: userCreatedHandler,
-			Group:     "message-logger",
-			Types:     []string{messages.TypeUserCreated},
-			Errors:    consumerErrors,
-		})
-		if err != nil {
-			log.Printf("could not start consumers: %s\n", err.Error())
+		for {
+			err, ok := <-consumerStartupErrors
+			if !ok {
+				return
+			}
+			log.Printf("failed to start consumer: %s\n", err.Error())
 		}
 	}()
 
 	log.Println("waiting for consumers to stop")
 	wg.Wait()
-
-	// close consumerErrors channel now all consumers using it have stopped
-	close(consumerErrors)
 
 	log.Println("all consumers have stopped")
 }

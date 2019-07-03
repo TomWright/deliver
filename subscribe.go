@@ -3,6 +3,7 @@ package deliver
 import (
 	"context"
 	"github.com/pkg/errors"
+	"sync"
 )
 
 // ConsumeFn is a function to handle a consumed message.
@@ -53,4 +54,37 @@ type Subscriber interface {
 	//
 	// The consumer will be stopped when the given context is cancelled.
 	Subscribe(ctx context.Context, options SubscribeOptions) error
+}
+
+// SubscribeNonBlocking allows you to start many consumers with the same SubscribeOptions, in a non-blocking way.
+// If nothing is reading from errChan this function will be blocked and you will
+// not be notified if any consumers weren't started.
+func SubscribeNonBlocking(ctx context.Context, options SubscribeOptions, subscriber Subscriber, wg *sync.WaitGroup, consumerCount int) chan error {
+	errChan := make(chan error)
+
+	// increment the wait group
+	wg.Add(consumerCount)
+
+	for i := 0; i < consumerCount; i++ {
+		// start the consumer in a new go routine
+		go func() {
+			// when this function returns, the consumer has stopped running
+			defer wg.Done()
+
+			// block here until the consumer stops running
+			err := subscriber.Subscribe(ctx, options)
+			if err != nil {
+				// write any start-up errors to errChan.
+				errChan <- err
+			}
+		}()
+	}
+
+	// ensure errChan is closed once all consumers using it have stopped
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
+
+	return errChan
 }
