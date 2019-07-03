@@ -143,6 +143,7 @@ func (x *kafkaConsumerGroupHandler) ConsumeClaim(s sarama.ConsumerGroupSession, 
 	}
 }
 
+// NewKafkaPublisher returns a Publisher that will publish messages to kafka.
 func NewKafkaPublisher(brokerList []string) (Publisher, error) {
 	config := sarama.NewConfig()
 	config.Version = sarama.V1_1_0_0

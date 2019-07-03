@@ -1,6 +1,6 @@
 package deliver
 
-// Subscriber defines an interface that can be used to publish messages.
+// Publisher can be used to publish messages.
 type Publisher interface {
 	// Publish publishes the given message.
 	// If an error is returned, the message has not been published.

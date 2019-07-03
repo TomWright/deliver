@@ -16,13 +16,13 @@ type inMemoryMessage struct {
 	Payload []byte
 }
 
-// NewInMemoryPublisher returns a new in-memory message publisher.
-func NewInMemoryPublisher(bufferSize int, blockWrites bool) *inMemoryPublisher {
+// NewInMemoryPublisher returns a new in-memory message publisher and a channel that the messages will be sent to.
+func NewInMemoryPublisher(bufferSize int, blockWrites bool) (Publisher, <-chan *inMemoryMessage) {
 	p := &inMemoryPublisher{
 		messageChan: make(chan *inMemoryMessage, bufferSize),
 		blockWrites: blockWrites,
 	}
-	return p
+	return p, p.messageChan
 }
 
 type inMemoryPublisher struct {
@@ -70,9 +70,9 @@ func (x *inMemoryPublisher) Close() error {
 }
 
 // NewInMemorySubscriber returns a new in-memory message subscriber.
-func NewInMemorySubscriber(publisher *inMemoryPublisher) Subscriber {
+func NewInMemorySubscriber(messageChan <-chan *inMemoryMessage) Subscriber {
 	p := &inMemorySubscriber{
-		messageChan: publisher.messageChan,
+		messageChan: messageChan,
 		consumers:   make(map[string]map[string]*consumerConfig),
 	}
 	return p

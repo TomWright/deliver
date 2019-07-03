@@ -13,8 +13,8 @@ import (
 func main() {
 	ctx := context.Background()
 
-	publisher := deliver.NewInMemoryPublisher(0, false)
-	subscriber := deliver.NewInMemorySubscriber(publisher)
+	publisher, messageChan := deliver.NewInMemoryPublisher(0, false)
+	subscriber := deliver.NewInMemorySubscriber(messageChan)
 
 	// make sure we close the publisher when we're finished
 	defer func() {
@@ -38,7 +38,7 @@ func main() {
 	go startConsumer(consumerCtx, wg, subscriber, consumerErrors)
 	go startConsumer(consumerCtx, wg, subscriber, consumerErrors)
 
-	// publish some messagesw
+	// publish some messages
 	go publishMessages(publisher)
 
 	log.Println("waiting for consumers to stop")

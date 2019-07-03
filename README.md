@@ -32,6 +32,6 @@ subscriber := deliver.NewKafkaSubscriber(brokers)
 
 Setup non-blocking without a buffer:
 ```
-publisher := deliver.NewInMemoryPublisher(0, false)
-subscriber := deliver.NewInMemorySubscriber(publisher)
+publisher, messageChan := deliver.NewInMemoryPublisher(0, false)
+subscriber := deliver.NewInMemorySubscriber(messageChan)
 ```
