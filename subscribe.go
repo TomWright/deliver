@@ -25,7 +25,7 @@ type SubscribeOptions struct {
 }
 
 // Validate makes sure we have a set of valid options and applies defaults.
-func (x SubscribeOptions) Validate() error {
+func (x *SubscribeOptions) Validate() error {
 	if x.Group == "" {
 		x.Group = "default"
 	}
